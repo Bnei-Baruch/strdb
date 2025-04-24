@@ -9,19 +9,14 @@ import (
 	"os"
 )
 
-type Config struct {
-	Name        string
-	Ip          string
-	Description string
-	Services    []Service
+type Server struct {
+	Name   string `json:"name"`
+	DNS    string `json:"dns"`
+	Enable bool   `json:"enable"`
+	Online bool   `json:"online"`
 }
 
-type Service struct {
-	ID          string
-	Name        string
-	Description string
-	Args        []string
-}
+type Config map[string]Server
 
 func getJson(ep string) (*Config, error) {
 	req, err := http.NewRequest("GET", viper.GetString("server.cfg_url")+ep, nil)

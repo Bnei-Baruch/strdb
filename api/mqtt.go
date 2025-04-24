@@ -27,6 +27,12 @@ type PahoLogAdapter struct {
 	level log.Level
 }
 
+type StrStatus struct {
+	Online bool `json:"online"`
+}
+
+var STRDB Config
+
 func NewPahoLogAdapter(level log.Level) *PahoLogAdapter {
 	return &PahoLogAdapter{level: level}
 }
@@ -40,6 +46,13 @@ func (a *PahoLogAdapter) Printf(format string, v ...interface{}) {
 }
 
 func InitMQTT() error {
+	strdb, err := getConf()
+	if err != nil {
+		log.Errorf("Get conf error: %s", err)
+		return err
+	}
+	STRDB = *strdb
+
 	log.Info("[InitMQTT] Init")
 	//mqtt.DEBUG = NewPahoLogAdapter(log.DebugLevel)
 	//mqtt.WARN = NewPahoLogAdapter(log.WarnLevel)
@@ -86,6 +99,18 @@ func ExecMessage(c mqtt.Client, m mqtt.Message) {
 	chk, _ := regexp.MatchString(`str`, s[1])
 	if chk == true {
 		log.Debugf("[ExecMessage] topic: %s |  message: %s", m.Topic(), string(m.Payload()))
+		var update StrStatus
+		if err := json.Unmarshal(m.Payload(), &update); err != nil {
+			log.Errorf("[SubMQTT] Faild to unmarshal: %s", err)
+		}
+		SetOnline(s[1], update.Online)
+	}
+}
+
+func SetOnline(name string, status bool) {
+	if server, ok := STRDB[name]; ok {
+		server.Online = status
+		STRDB[name] = server
 	}
 }
 
