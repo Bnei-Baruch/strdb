@@ -2,13 +2,16 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"os"
 	"sync"
+	"time"
 )
 
 type Server struct {
@@ -95,6 +98,27 @@ func getConf() (*Config, error) {
 		return nil, err
 	}
 	return &Config, nil
+}
+
+func getRandomServer() (string, error) {
+	mutex.RLock()
+	defer mutex.RUnlock()
+
+	var available []string
+	for _, server := range StrDB {
+		if server.Online && server.Enable {
+			available = append(available, server.Name)
+		}
+	}
+
+	if len(available) == 0 {
+		err := errors.New("что-то пошло не так")
+		return "", err
+	}
+
+	rand.Seed(time.Now().UnixNano()) // инициализация генератора
+	randomIndex := rand.Intn(len(available))
+	return available[randomIndex], nil
 }
 
 func SetOnline(name string, status bool) {
