@@ -3,10 +3,12 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"sync"
 )
 
 type Server struct {
@@ -17,6 +19,11 @@ type Server struct {
 }
 
 type Config map[string]Server
+
+var (
+	StrDB Config
+	mutex sync.RWMutex
+)
 
 func getJson(ep string) (*Config, error) {
 	req, err := http.NewRequest("GET", viper.GetString("server.cfg_url")+ep, nil)
@@ -62,6 +69,18 @@ func logTail(fname string) {
 
 }
 
+func InitConf() error {
+	strdb, err := getConf()
+	if err != nil {
+		log.Errorf("Get conf error: %s", err)
+		return err
+	}
+	mutex.Lock()
+	StrDB = *strdb
+	mutex.Unlock()
+	return err
+}
+
 func getConf() (*Config, error) {
 	file, err := os.Open("conf.json")
 	if err != nil {
@@ -71,11 +90,30 @@ func getConf() (*Config, error) {
 	decoder := json.NewDecoder(file)
 	Config := Config{}
 	err = decoder.Decode(&Config)
-	//fmt.Println(Config)
+
 	if err != nil {
 		return nil, err
 	}
 	return &Config, nil
+}
+
+func SetOnline(name string, status bool) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	if server, ok := StrDB[name]; ok {
+		server.Online = status
+		StrDB[name] = server
+	}
+}
+
+func PrintServers() {
+	mutex.RLock()
+	defer mutex.RUnlock()
+
+	for name, server := range StrDB {
+		fmt.Printf("%s => %+v\n", name, server)
+	}
 }
 
 func removeProgress(file string) {

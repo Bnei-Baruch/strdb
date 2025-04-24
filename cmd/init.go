@@ -50,6 +50,11 @@ func Init() {
 		})
 	}
 
+	// Init Config
+	if err := api.InitConf(); err != nil {
+		log.Errorf("CONFIG Init error: %s", err)
+	}
+
 	// Setup mqtt
 	if err := api.InitMQTT(); err != nil {
 		log.Errorf("MQTT Init error: %s", err)
