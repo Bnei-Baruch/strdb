@@ -6,6 +6,8 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"regexp"
+	"strings"
 )
 
 var MQTT mqtt.Client
@@ -66,6 +68,13 @@ func SubMQTT(c mqtt.Client) {
 	} else {
 		log.Infof("[SubMQTT] notify status to: %s", viper.GetString("mqtt.status_topic"))
 	}
+
+	ExecServiceTopic := viper.GetString("mqtt.str_status_topic")
+	if token := MQTT.Subscribe(ExecServiceTopic, byte(1), ExecMessage); token.Wait() && token.Error() != nil {
+		log.Errorf("[SubMQTT] Subscribe error: %s", token.Error())
+	} else {
+		log.Infof("[SubMQTT] Subscribed to: %s", ExecServiceTopic)
+	}
 }
 
 func LostMQTT(c mqtt.Client, err error) {
@@ -73,7 +82,11 @@ func LostMQTT(c mqtt.Client, err error) {
 }
 
 func ExecMessage(c mqtt.Client, m mqtt.Message) {
-	log.Debugf("[ExecMessage] topic: %s |  message: %s", m.Topic(), string(m.Payload()))
+	s := strings.Split(m.Topic(), "/")
+	chk, _ := regexp.MatchString(`str`, s[1])
+	if chk == true {
+		log.Debugf("[ExecMessage] topic: %s |  message: %s", m.Topic(), string(m.Payload()))
+	}
 }
 
 func SendRespond(id string, m *MqttPayload) {
