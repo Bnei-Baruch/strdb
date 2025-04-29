@@ -28,8 +28,8 @@ var (
 	mutex sync.RWMutex
 )
 
-func getJson(ep string) (*Config, error) {
-	req, err := http.NewRequest("GET", viper.GetString("server.cfg_url")+ep, nil)
+func getJson() (*Config, error) {
+	req, err := http.NewRequest("GET", viper.GetString("server.cfg_url"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,11 @@ func logTail(fname string) {
 }
 
 func InitConf() error {
-	strdb, err := getConf()
+	strdb, err := getJson()
+	if err != nil {
+		strdb, err = getConf()
+	}
+
 	if err != nil {
 		log.Errorf("Get conf error: %s", err)
 		return err
