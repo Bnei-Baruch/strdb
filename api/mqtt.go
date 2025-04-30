@@ -156,30 +156,33 @@ func HandleStatusMessage(c mqtt.Client, m mqtt.Message) {
 }
 
 func HandleAdminMessage(c mqtt.Client, m mqtt.Message) {
-	s := strings.Split(m.Topic(), "/")
-	if len(s) < 2 {
-		log.Errorf("[HandleAdminMessage] Invalid topic format: %s", m.Topic())
-		return
-	}
-
-	serverName := s[1]
 	log.Debugf("[ExecMessage] topic: %s | message: %s", m.Topic(), string(m.Payload()))
 
-	var response JanusResponse
-	if err := json.Unmarshal(m.Payload(), &response); err != nil {
-		log.Errorf("[HandleAdminMessage] Failed to unmarshal: %s", err)
-		return
-	}
-
-	if response.Janus == "success" {
-		// Update sessions count in StrDB
-		mutex.Lock()
-		if server, ok := StrDB[serverName]; ok {
-			server.Sessions = len(response.Sessions)
-			StrDB[serverName] = server
+	go func() {
+		s := strings.Split(m.Topic(), "/")
+		if len(s) < 2 {
+			log.Errorf("[HandleAdminMessage] Invalid topic format: %s", m.Topic())
+			return
 		}
-		mutex.Unlock()
-	}
+
+		serverName := s[1]
+
+		var response JanusResponse
+		if err := json.Unmarshal(m.Payload(), &response); err != nil {
+			log.Errorf("[HandleAdminMessage] Failed to unmarshal: %s", err)
+			return
+		}
+
+		if response.Janus == "success" {
+			// Update sessions count in StrDB
+			mutex.Lock()
+			if server, ok := StrDB[serverName]; ok {
+				server.Sessions = len(response.Sessions)
+				StrDB[serverName] = server
+			}
+			mutex.Unlock()
+		}
+	}()
 }
 
 func SendRespond(id string, m *MqttPayload) {
