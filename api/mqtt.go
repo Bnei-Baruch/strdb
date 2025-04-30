@@ -126,7 +126,7 @@ func SendAdminMessage(topic string) {
 	message := map[string]interface{}{
 		"janus":        "list_sessions",
 		"transaction":  "transaction",
-		"admin_secret": "janusoverlord",
+		"admin_secret": viper.GetString("mqtt.admin_secret"),
 	}
 
 	jsonMessage, err := json.Marshal(message)
@@ -135,7 +135,9 @@ func SendAdminMessage(topic string) {
 		return
 	}
 
-	log.Debugf("[SendMessage] topic: %s | message: %s", topic, jsonMessage)
+	if viper.GetString("mqtt.debug") == "true" {
+		log.Debugf("[SendMessage] topic: %s | message: %s", topic, jsonMessage)
+	}
 
 	if token := MQTT.Publish(topic, byte(1), false, jsonMessage); token.Wait() && token.Error() != nil {
 		log.Errorf("Send State: %s", token.Error())
@@ -146,7 +148,9 @@ func HandleStatusMessage(c mqtt.Client, m mqtt.Message) {
 	s := strings.Split(m.Topic(), "/")
 	chk, _ := regexp.MatchString(`str`, s[1])
 	if chk == true {
-		log.Debugf("[ExecMessage] topic: %s |  message: %s", m.Topic(), string(m.Payload()))
+		if viper.GetString("mqtt.debug") == "true" {
+			log.Debugf("[ExecMessage] topic: %s |  message: %s", m.Topic(), string(m.Payload()))
+		}
 		var update StrStatus
 		if err := json.Unmarshal(m.Payload(), &update); err != nil {
 			log.Errorf("[SubMQTT] Faild to unmarshal: %s", err)
@@ -156,7 +160,9 @@ func HandleStatusMessage(c mqtt.Client, m mqtt.Message) {
 }
 
 func HandleAdminMessage(c mqtt.Client, m mqtt.Message) {
-	log.Debugf("[ExecMessage] topic: %s | message: %s", m.Topic(), string(m.Payload()))
+	if viper.GetString("mqtt.debug") == "true" {
+		log.Debugf("[ExecMessage] topic: %s | message: %s", m.Topic(), string(m.Payload()))
+	}
 
 	go func() {
 		s := strings.Split(m.Topic(), "/")
@@ -166,7 +172,6 @@ func HandleAdminMessage(c mqtt.Client, m mqtt.Message) {
 		}
 
 		serverName := s[1]
-
 		var response JanusResponse
 		if err := json.Unmarshal(m.Payload(), &response); err != nil {
 			log.Errorf("[HandleAdminMessage] Failed to unmarshal: %s", err)
