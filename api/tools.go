@@ -15,10 +15,11 @@ import (
 )
 
 type Server struct {
-	Name   string `json:"name"`
-	DNS    string `json:"dns"`
-	Enable bool   `json:"enable"`
-	Online bool   `json:"online"`
+	Name     string `json:"name"`
+	DNS      string `json:"dns"`
+	Sessions int    `json:"sessions"`
+	Enable   bool   `json:"enable"`
+	Online   bool   `json:"online"`
 }
 
 type Config map[string]Server

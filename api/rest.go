@@ -1,11 +1,12 @@
 package api
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/spf13/viper"
 	"io/ioutil"
 	"net/http"
 	"os"
+
+	"github.com/gin-gonic/gin"
+	"github.com/spf13/viper"
 )
 
 type User struct {
@@ -88,6 +89,13 @@ func getData(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"result": "success"})
+}
+
+func getStatus(c *gin.Context) {
+	mutex.RLock()
+	defer mutex.RUnlock()
+
+	c.JSON(http.StatusOK, StrDB)
 }
 
 func getServer(c *gin.Context) {
