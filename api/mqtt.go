@@ -3,11 +3,13 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
+	"time"
+
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"regexp"
-	"strings"
 )
 
 var MQTT mqtt.Client
@@ -21,6 +23,12 @@ type MqttPayload struct {
 	Message string      `json:"message,omitempty"`
 	Result  string      `json:"result,omitempty"`
 	Data    interface{} `json:"data,omitempty"`
+}
+
+type JanusResponse struct {
+	Janus       string  `json:"janus"`
+	Transaction string  `json:"transaction"`
+	Sessions    []int64 `json:"sessions"`
 }
 
 type PahoLogAdapter struct {
@@ -63,7 +71,29 @@ func InitMQTT() error {
 	if token := MQTT.Connect(); token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
+
+	// Start Janus Admin messages sending
+	go startPeriodicMessages()
+
 	return nil
+}
+
+func startPeriodicMessages() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// Send admin messages to all servers
+			mutex.RLock()
+			for _, server := range StrDB {
+				topic := fmt.Sprintf("janus/%s/to-janus-admin", server.Name)
+				SendAdminMessage(topic)
+			}
+			mutex.RUnlock()
+		}
+	}
 }
 
 func SubMQTT(c mqtt.Client) {
@@ -73,11 +103,18 @@ func SubMQTT(c mqtt.Client) {
 		log.Infof("[SubMQTT] notify status to: %s", viper.GetString("mqtt.status_topic"))
 	}
 
-	ExecServiceTopic := viper.GetString("mqtt.str_status_topic")
-	if token := MQTT.Subscribe(ExecServiceTopic, byte(1), ExecMessage); token.Wait() && token.Error() != nil {
+	StrStatusTopic := viper.GetString("mqtt.str_status_topic")
+	if token := MQTT.Subscribe(StrStatusTopic, byte(1), HandleStatusMessage); token.Wait() && token.Error() != nil {
 		log.Errorf("[SubMQTT] Subscribe error: %s", token.Error())
 	} else {
-		log.Infof("[SubMQTT] Subscribed to: %s", ExecServiceTopic)
+		log.Infof("[SubMQTT] Subscribed to: %s", StrStatusTopic)
+	}
+
+	StrAdminTopic := viper.GetString("mqtt.str_admin_topic")
+	if token := MQTT.Subscribe(StrAdminTopic, byte(1), HandleAdminMessage); token.Wait() && token.Error() != nil {
+		log.Errorf("[SubMQTT] Subscribe error: %s", token.Error())
+	} else {
+		log.Infof("[SubMQTT] Subscribed to: %s", StrAdminTopic)
 	}
 }
 
@@ -85,7 +122,27 @@ func LostMQTT(c mqtt.Client, err error) {
 	log.Errorf("[LostMQTT] Lost connection: %s", err)
 }
 
-func ExecMessage(c mqtt.Client, m mqtt.Message) {
+func SendAdminMessage(topic string) {
+	message := map[string]interface{}{
+		"janus":        "list_sessions",
+		"transaction":  "transaction",
+		"admin_secret": "janusoverlord",
+	}
+
+	jsonMessage, err := json.Marshal(message)
+	if err != nil {
+		log.Errorf("Message parsing: %s", err)
+		return
+	}
+
+	log.Debugf("[SendMessage] topic: %s | message: %s", topic, jsonMessage)
+
+	if token := MQTT.Publish(topic, byte(1), false, jsonMessage); token.Wait() && token.Error() != nil {
+		log.Errorf("Send State: %s", token.Error())
+	}
+}
+
+func HandleStatusMessage(c mqtt.Client, m mqtt.Message) {
 	s := strings.Split(m.Topic(), "/")
 	chk, _ := regexp.MatchString(`str`, s[1])
 	if chk == true {
@@ -95,6 +152,33 @@ func ExecMessage(c mqtt.Client, m mqtt.Message) {
 			log.Errorf("[SubMQTT] Faild to unmarshal: %s", err)
 		}
 		SetOnline(s[1], update.Online)
+	}
+}
+
+func HandleAdminMessage(c mqtt.Client, m mqtt.Message) {
+	s := strings.Split(m.Topic(), "/")
+	if len(s) < 2 {
+		log.Errorf("[HandleAdminMessage] Invalid topic format: %s", m.Topic())
+		return
+	}
+
+	serverName := s[1]
+	log.Debugf("[ExecMessage] topic: %s | message: %s", m.Topic(), string(m.Payload()))
+
+	var response JanusResponse
+	if err := json.Unmarshal(m.Payload(), &response); err != nil {
+		log.Errorf("[HandleAdminMessage] Failed to unmarshal: %s", err)
+		return
+	}
+
+	if response.Janus == "success" {
+		// Update sessions count in StrDB
+		mutex.Lock()
+		if server, ok := StrDB[serverName]; ok {
+			server.Sessions = len(response.Sessions)
+			StrDB[serverName] = server
+		}
+		mutex.Unlock()
 	}
 }
 
