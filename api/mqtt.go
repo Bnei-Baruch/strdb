@@ -85,11 +85,13 @@ func startPeriodicMessages() {
 	for {
 		select {
 		case <-ticker.C:
-			// Send admin messages to all servers
+			// Send admin messages to enable and online servers
 			mutex.RLock()
 			for _, server := range StrDB {
-				topic := fmt.Sprintf("janus/%s/to-janus-admin", server.Name)
-				SendAdminMessage(topic)
+				if server.Online && server.Enable {
+					topic := fmt.Sprintf("janus/%s/to-janus-admin", server.Name)
+					SendAdminMessage(topic)
+				}
 			}
 			mutex.RUnlock()
 		}
