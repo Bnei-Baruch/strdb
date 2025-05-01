@@ -133,16 +133,16 @@ func SendAdminMessage(topic string) {
 
 	jsonMessage, err := json.Marshal(message)
 	if err != nil {
-		log.Errorf("Message parsing: %s", err)
+		log.Errorf("[SendAdminMessage] Message parsing: %s", err)
 		return
 	}
 
 	if viper.GetString("mqtt.debug") == "true" {
-		log.Debugf("[SendMessage] topic: %s | message: %s", topic, jsonMessage)
+		log.Debugf("[SendAdminMessage] topic: %s | message: %s", topic, jsonMessage)
 	}
 
 	if token := MQTT.Publish(topic, byte(1), false, jsonMessage); token.Wait() && token.Error() != nil {
-		log.Errorf("Send State: %s", token.Error())
+		log.Errorf("[SendAdminMessage] Pubish: %s", token.Error())
 	}
 }
 
@@ -151,11 +151,11 @@ func HandleStatusMessage(c mqtt.Client, m mqtt.Message) {
 	chk, _ := regexp.MatchString(`str`, s[1])
 	if chk == true {
 		if viper.GetString("mqtt.debug") == "true" {
-			log.Debugf("[ExecMessage] topic: %s |  message: %s", m.Topic(), string(m.Payload()))
+			log.Debugf("[HandleStatusMessage] topic: %s |  message: %s", m.Topic(), string(m.Payload()))
 		}
 		var update StrStatus
 		if err := json.Unmarshal(m.Payload(), &update); err != nil {
-			log.Errorf("[SubMQTT] Faild to unmarshal: %s", err)
+			log.Errorf("[HandleStatusMessage] Faild to unmarshal: %s", err)
 		}
 		SetOnline(s[1], update.Online)
 	}
@@ -163,7 +163,7 @@ func HandleStatusMessage(c mqtt.Client, m mqtt.Message) {
 
 func HandleAdminMessage(c mqtt.Client, m mqtt.Message) {
 	if viper.GetString("mqtt.debug") == "true" {
-		log.Debugf("[ExecMessage] topic: %s | message: %s", m.Topic(), string(m.Payload()))
+		log.Debugf("[HandleAdminMessage] topic: %s | message: %s", m.Topic(), string(m.Payload()))
 	}
 
 	go func() {
@@ -190,47 +190,4 @@ func HandleAdminMessage(c mqtt.Client, m mqtt.Message) {
 			mutex.Unlock()
 		}
 	}()
-}
-
-func SendRespond(id string, m *MqttPayload) {
-	var topic string
-	ExecDataTopic := viper.GetString("mqtt.exec_data_topic")
-	ClientID := viper.GetString("mqtt.client_id")
-
-	if id == "false" {
-		topic = ExecDataTopic + ClientID
-	} else {
-		topic = ExecDataTopic + ClientID + "/" + id
-	}
-	message, err := json.Marshal(m)
-	if err != nil {
-		log.Errorf("Message parsing: %s", err)
-	}
-
-	text := fmt.Sprintf(string(message))
-	log.Debugf("[SendRespond] topic: %s |  message: %s", topic, string(message))
-	if token := MQTT.Publish(topic, byte(1), false, text); token.Wait() && token.Error() != nil {
-		log.Errorf("Send Respond: %s", err)
-	}
-}
-
-func SendState(topic string, state string) {
-	log.Debugf("[SendState] topic: %s |  message: %s", topic, state)
-
-	if token := MQTT.Publish(topic, byte(1), true, state); token.Wait() && token.Error() != nil {
-		log.Errorf("Send State: %s", token.Error())
-	}
-}
-
-func SendMessage(topic string, p *MqttPayload) {
-	message, err := json.Marshal(p)
-	if err != nil {
-		log.Errorf("Message parsing: %s", err)
-	}
-
-	log.Debugf("[SendMessage] topic: %s |  message: %s", topic, message)
-
-	if token := MQTT.Publish(topic, byte(1), false, message); token.Wait() && token.Error() != nil {
-		log.Errorf("Send State: %s", token.Error())
-	}
 }

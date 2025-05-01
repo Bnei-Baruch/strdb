@@ -1,12 +1,8 @@
 package api
 
 import (
-	"io/ioutil"
-	"net/http"
-	"os"
-
 	"github.com/gin-gonic/gin"
-	"github.com/spf13/viper"
+	"net/http"
 )
 
 type User struct {
@@ -65,32 +61,6 @@ type Geo struct {
 	Region      string `json:"region"`
 }
 
-func getFilesList(c *gin.Context) {
-
-	var list []string
-	files, err := ioutil.ReadDir(viper.GetString("workflow.capture_path"))
-	if err != nil {
-		c.AbortWithStatus(http.StatusNotFound)
-	}
-
-	for _, f := range files {
-		list = append(list, f.Name())
-	}
-
-	c.JSON(http.StatusOK, list)
-}
-
-func getData(c *gin.Context) {
-	file := c.Params.ByName("file")
-
-	if _, err := os.Stat(viper.GetString("workflow.capture_path") + file); os.IsNotExist(err) {
-		c.AbortWithStatus(http.StatusNotFound)
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"result": "success"})
-}
-
 func getStatus(c *gin.Context) {
 	mutex.RLock()
 	defer mutex.RUnlock()
@@ -123,10 +93,4 @@ func getServerByID(c *gin.Context) {
 	} else {
 		c.JSON(http.StatusOK, gin.H{"server": srv})
 	}
-}
-
-func getFile(c *gin.Context) {
-	file := c.Params.ByName("file")
-
-	http.ServeFile(c.Writer, c.Request, viper.GetString("workflow.capture_path")+file)
 }

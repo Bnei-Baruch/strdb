@@ -56,23 +56,6 @@ func getJson() (*Config, error) {
 	return &conf, nil
 }
 
-func logTail(fname string) {
-	file, err := os.Open(fname)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	buf := make([]byte, 215)
-	stat, err := os.Stat(fname)
-	start := stat.Size() - 215
-	_, err = file.ReadAt(buf, start)
-	if err == nil {
-		fmt.Printf("%s\n", buf)
-	}
-
-}
-
 func InitConf() error {
 	strdb, err := getJson()
 	if err != nil {
@@ -117,7 +100,7 @@ func getRandomServer() (string, error) {
 	}
 
 	if len(available) == 0 {
-		err := errors.New("что-то пошло не так")
+		err := errors.New("getRandomServer: no available servers")
 		return "", err
 	}
 
@@ -142,15 +125,5 @@ func PrintServers() {
 
 	for name, server := range StrDB {
 		fmt.Printf("%s => %+v\n", name, server)
-	}
-}
-
-func removeProgress(file string) {
-	_, err := os.Stat(file)
-	if err == nil {
-		e := os.Remove(file)
-		if e != nil {
-			fmt.Printf("%s\n", e)
-		}
 	}
 }
