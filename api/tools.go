@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 )
 
 type Server struct {
@@ -27,6 +28,7 @@ type Config map[string]Server
 var (
 	StrDB Config
 	mutex sync.RWMutex
+	rnd   *rand.Rand
 )
 
 func getJson() (*Config, error) {
@@ -57,6 +59,9 @@ func getJson() (*Config, error) {
 }
 
 func InitConf() error {
+	// Initialize random generator once
+	rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
+
 	strdb, err := getJson()
 	if err != nil {
 		strdb, err = getConf()
@@ -92,21 +97,43 @@ func getRandomServer() (string, error) {
 	mutex.RLock()
 	defer mutex.RUnlock()
 
-	var available []string
+	var available []Server
 	for _, server := range StrDB {
 		if server.Online && server.Enable {
-			available = append(available, server.Name)
+			available = append(available, server)
 		}
 	}
 
 	if len(available) == 0 {
 		err := errors.New("getRandomServer: no available servers")
+		log.Error(err)
 		return "", err
 	}
 
-	rand.Seed(time.Now().UnixNano()) // инициализация генератора
-	randomIndex := rand.Intn(len(available))
-	return available[randomIndex], nil
+	// Find server with minimum sessions
+	minSessions := available[0].Sessions
+	minSessionsServers := []Server{available[0]}
+
+	for _, server := range available[1:] {
+		if server.Sessions < minSessions {
+			minSessions = server.Sessions
+			minSessionsServers = []Server{server}
+		} else if server.Sessions == minSessions {
+			minSessionsServers = append(minSessionsServers, server)
+		}
+	}
+
+	// If we have multiple servers with the same minimum sessions, choose randomly
+	randomIndex := rnd.Intn(len(minSessionsServers))
+	selectedServer := minSessionsServers[randomIndex]
+
+	log.WithFields(log.Fields{
+		"server":   selectedServer.Name,
+		"dns":      selectedServer.DNS,
+		"sessions": selectedServer.Sessions,
+	}).Debug("Selected server for request")
+
+	return selectedServer.Name, nil
 }
 
 func SetOnline(name string, status bool) {
