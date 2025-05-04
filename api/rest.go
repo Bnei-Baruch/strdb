@@ -69,7 +69,7 @@ func getStatus(c *gin.Context) {
 }
 
 func getServer(c *gin.Context) {
-	srv, err := getRandomServer()
+	srv, err := getBestServer()
 	if err != nil {
 		c.AbortWithStatus(http.StatusNotFound)
 	}
@@ -83,7 +83,7 @@ func getServerByID(c *gin.Context) {
 		NewBadRequestError(err).Abort(c)
 	}
 
-	srv, err := getRandomServer()
+	srv, err := getBestServer()
 	if err != nil {
 		c.AbortWithStatus(http.StatusNotFound)
 	}

@@ -93,7 +93,7 @@ func getConf() (*Config, error) {
 	return &Config, nil
 }
 
-func getRandomServer() (string, error) {
+func getBestServer() (string, error) {
 	mutex.RLock()
 	defer mutex.RUnlock()
 
@@ -105,7 +105,7 @@ func getRandomServer() (string, error) {
 	}
 
 	if len(available) == 0 {
-		err := errors.New("getRandomServer: no available servers")
+		err := errors.New("getBestServer: no available servers")
 		log.Error(err)
 		return "", err
 	}
