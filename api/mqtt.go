@@ -147,18 +147,20 @@ func SendAdminMessage(topic string) {
 }
 
 func HandleStatusMessage(c mqtt.Client, m mqtt.Message) {
-	s := strings.Split(m.Topic(), "/")
-	chk, _ := regexp.MatchString(`str`, s[1])
-	if chk == true {
-		if viper.GetString("mqtt.debug") == "true" {
-			log.Debugf("[HandleStatusMessage] topic: %s |  message: %s", m.Topic(), string(m.Payload()))
+	go func() {
+		s := strings.Split(m.Topic(), "/")
+		chk, _ := regexp.MatchString(`str`, s[1])
+		if chk == true {
+			if viper.GetString("mqtt.debug") == "true" {
+				log.Debugf("[HandleStatusMessage] topic: %s |  message: %s", m.Topic(), string(m.Payload()))
+			}
+			var update StrStatus
+			if err := json.Unmarshal(m.Payload(), &update); err != nil {
+				log.Errorf("[HandleStatusMessage] Faild to unmarshal: %s", err)
+			}
+			SetOnline(s[1], update.Online)
 		}
-		var update StrStatus
-		if err := json.Unmarshal(m.Payload(), &update); err != nil {
-			log.Errorf("[HandleStatusMessage] Faild to unmarshal: %s", err)
-		}
-		SetOnline(s[1], update.Online)
-	}
+	}()
 }
 
 func HandleAdminMessage(c mqtt.Client, m mqtt.Message) {
