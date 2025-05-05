@@ -53,8 +53,10 @@ func (a *PahoLogAdapter) Printf(format string, v ...interface{}) {
 
 func InitMQTT() error {
 	log.Info("[InitMQTT] Init")
-	//mqtt.DEBUG = NewPahoLogAdapter(log.DebugLevel)
-	//mqtt.WARN = NewPahoLogAdapter(log.WarnLevel)
+	if viper.GetString("mqtt.debug") == "true" {
+		mqtt.DEBUG = NewPahoLogAdapter(log.DebugLevel)
+		mqtt.WARN = NewPahoLogAdapter(log.WarnLevel)
+	}
 	mqtt.CRITICAL = NewPahoLogAdapter(log.PanicLevel)
 	mqtt.ERROR = NewPahoLogAdapter(log.ErrorLevel)
 
@@ -137,7 +139,7 @@ func SendAdminMessage(topic string) {
 		return
 	}
 
-	if viper.GetString("mqtt.debug") == "true" {
+	if viper.GetString("mqtt.trace") == "true" {
 		log.Debugf("[SendAdminMessage] topic: %s | message: %s", topic, jsonMessage)
 	}
 
@@ -164,7 +166,7 @@ func HandleStatusMessage(c mqtt.Client, m mqtt.Message) {
 }
 
 func HandleAdminMessage(c mqtt.Client, m mqtt.Message) {
-	if viper.GetString("mqtt.debug") == "true" {
+	if viper.GetString("mqtt.trace") == "true" {
 		log.Debugf("[HandleAdminMessage] topic: %s | message: %s", m.Topic(), string(m.Payload()))
 	}
 
