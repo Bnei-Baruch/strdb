@@ -1,8 +1,9 @@
 package api
 
 import (
-	"github.com/gin-gonic/gin"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 type User struct {
@@ -81,16 +82,17 @@ func getServerByID(c *gin.Context) {
 	err := c.BindJSON(&t)
 	if err != nil {
 		NewBadRequestError(err).Abort(c)
+		return
 	}
 
-	srv, err := getBestServer()
+	// Get country code from Geo data
+	countryCode := t.Geo.CountryCode
+
+	srv, err := getBestServerForCountry(countryCode)
 	if err != nil {
 		c.AbortWithStatus(http.StatusNotFound)
+		return
 	}
 
-	if err != nil {
-		NewInternalError(err).Abort(c)
-	} else {
-		c.JSON(http.StatusOK, gin.H{"server": srv})
-	}
+	c.JSON(http.StatusOK, gin.H{"server": srv})
 }

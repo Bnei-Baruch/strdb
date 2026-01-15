@@ -21,6 +21,7 @@ type Server struct {
 	Sessions int    `json:"sessions"`
 	Enable   bool   `json:"enable"`
 	Online   bool   `json:"online"`
+	Region   string `json:"region"` // Region restriction, e.g., "RU" for Russia-only servers
 }
 
 type Config map[string]Server
@@ -94,19 +95,41 @@ func getConf() (*Config, error) {
 }
 
 func getBestServer() (string, error) {
+	return getBestServerForCountry("")
+}
+
+func getBestServerForCountry(countryCode string) (string, error) {
 	mutex.RLock()
 	defer mutex.RUnlock()
 
 	var available []Server
+
+	// Filter servers based on country code and region restrictions
 	for _, server := range StrDB {
-		if server.Online && server.Enable {
+		if !server.Online || !server.Enable {
+			continue
+		}
+
+		// Universal region filtering logic:
+		// 1. Servers with empty region ("") are available for all countries
+		// 2. Servers with specific region (e.g., "RU", "CN") are available ONLY for that country
+		// 3. Clients from specific country get: their regional servers + global servers (region=="")
+
+		if server.Region == "" {
+			// Global server - available for everyone
+			available = append(available, server)
+		} else if server.Region == countryCode {
+			// Regional server matching client's country
 			available = append(available, server)
 		}
+		// Otherwise skip - this server is for a different region
 	}
 
 	if len(available) == 0 {
-		err := errors.New("getBestServer: no available servers")
-		log.Error(err)
+		err := errors.New("getBestServerForCountry: no available servers")
+		log.WithFields(log.Fields{
+			"country_code": countryCode,
+		}).Error(err)
 		return "", err
 	}
 
@@ -128,9 +151,11 @@ func getBestServer() (string, error) {
 	selectedServer := minSessionsServers[randomIndex]
 
 	log.WithFields(log.Fields{
-		"server":   selectedServer.Name,
-		"dns":      selectedServer.DNS,
-		"sessions": selectedServer.Sessions,
+		"server":       selectedServer.Name,
+		"dns":          selectedServer.DNS,
+		"sessions":     selectedServer.Sessions,
+		"region":       selectedServer.Region,
+		"country_code": countryCode,
 	}).Debug("Selected server for request")
 
 	return selectedServer.Name, nil
