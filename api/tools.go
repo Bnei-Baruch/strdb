@@ -105,13 +105,13 @@ func getBestServerForCountry(countryCode string) (string, error) {
 	var available []Server
 	var regionalServers []Server
 	var globalServers []Server
-	
+
 	// Filter servers based on country code and region restrictions
 	for _, server := range StrDB {
 		if !server.Online || !server.Enable {
 			continue
 		}
-		
+
 		if server.Region == "" {
 			// Global server
 			globalServers = append(globalServers, server)
@@ -121,15 +121,30 @@ func getBestServerForCountry(countryCode string) (string, error) {
 		}
 		// Otherwise skip - this server is for a different region
 	}
-	
+
 	// Logic: If regional servers exist for this country, use ONLY them
 	// Otherwise, use global servers
+	var poolType string
 	if len(regionalServers) > 0 {
 		// Country has dedicated regional servers - use only those
 		available = regionalServers
+		poolType = "regional"
+		log.WithFields(log.Fields{
+			"country_code":     countryCode,
+			"regional_servers": len(regionalServers),
+			"global_servers":   len(globalServers),
+			"pool_type":        poolType,
+		}).Info("Using regional server pool (global servers excluded)")
 	} else {
 		// No regional servers for this country - use global servers
 		available = globalServers
+		poolType = "global"
+		log.WithFields(log.Fields{
+			"country_code":     countryCode,
+			"regional_servers": 0,
+			"global_servers":   len(globalServers),
+			"pool_type":        poolType,
+		}).Info("Using global server pool (no regional servers for this country)")
 	}
 
 	if len(available) == 0 {
@@ -138,6 +153,12 @@ func getBestServerForCountry(countryCode string) (string, error) {
 			"country_code": countryCode,
 		}).Error(err)
 		return "", err
+	}
+
+	// Build list of available server names for logging
+	var availableNames []string
+	for _, s := range available {
+		availableNames = append(availableNames, fmt.Sprintf("%s(%d)", s.Name, s.Sessions))
 	}
 
 	// Find server with minimum sessions
@@ -153,17 +174,33 @@ func getBestServerForCountry(countryCode string) (string, error) {
 		}
 	}
 
+	// Build list of candidates with minimum sessions
+	var candidateNames []string
+	for _, s := range minSessionsServers {
+		candidateNames = append(candidateNames, s.Name)
+	}
+
 	// If we have multiple servers with the same minimum sessions, choose randomly
 	randomIndex := rnd.Intn(len(minSessionsServers))
 	selectedServer := minSessionsServers[randomIndex]
 
+	selectionReason := "minimum sessions"
+	if len(minSessionsServers) > 1 {
+		selectionReason = fmt.Sprintf("random from %d servers with minimum sessions", len(minSessionsServers))
+	}
+
 	log.WithFields(log.Fields{
-		"server":       selectedServer.Name,
-		"dns":          selectedServer.DNS,
-		"sessions":     selectedServer.Sessions,
-		"region":       selectedServer.Region,
-		"country_code": countryCode,
-	}).Debug("Selected server for request")
+		"country_code":      countryCode,
+		"pool_type":         poolType,
+		"available_servers": availableNames,
+		"min_sessions":      minSessions,
+		"candidates":        candidateNames,
+		"selected_server":   selectedServer.Name,
+		"server_dns":        selectedServer.DNS,
+		"server_sessions":   selectedServer.Sessions,
+		"server_region":     selectedServer.Region,
+		"selection_reason":  selectionReason,
+	}).Info("Server selected for client")
 
 	return selectedServer.Name, nil
 }

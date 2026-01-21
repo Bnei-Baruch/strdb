@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 )
 
 type User struct {
@@ -88,11 +89,34 @@ func getServerByID(c *gin.Context) {
 	// Get country code from Geo data
 	countryCode := t.Geo.CountryCode
 
+	// Log client request details
+	log.WithFields(log.Fields{
+		"username":     t.Username,
+		"email":        t.Email,
+		"ip":           t.IP,
+		"country":      t.Country,
+		"country_code": countryCode,
+		"city":         t.Geo.City,
+		"region":       t.Geo.Region,
+		"room":         t.Room,
+	}).Info("Client requesting server")
+
 	srv, err := getBestServerForCountry(countryCode)
 	if err != nil {
+		log.WithFields(log.Fields{
+			"username":     t.Username,
+			"country_code": countryCode,
+			"error":        err.Error(),
+		}).Error("Failed to get server for client")
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
+
+	log.WithFields(log.Fields{
+		"username":     t.Username,
+		"country_code": countryCode,
+		"assigned_server": srv,
+	}).Info("Server assigned to client")
 
 	c.JSON(http.StatusOK, gin.H{"server": srv})
 }
