@@ -103,26 +103,33 @@ func getBestServerForCountry(countryCode string) (string, error) {
 	defer mutex.RUnlock()
 
 	var available []Server
-
+	var regionalServers []Server
+	var globalServers []Server
+	
 	// Filter servers based on country code and region restrictions
 	for _, server := range StrDB {
 		if !server.Online || !server.Enable {
 			continue
 		}
-
-		// Universal region filtering logic:
-		// 1. Servers with empty region ("") are available for all countries
-		// 2. Servers with specific region (e.g., "RU", "CN") are available ONLY for that country
-		// 3. Clients from specific country get: their regional servers + global servers (region=="")
-
+		
 		if server.Region == "" {
-			// Global server - available for everyone
-			available = append(available, server)
+			// Global server
+			globalServers = append(globalServers, server)
 		} else if server.Region == countryCode {
 			// Regional server matching client's country
-			available = append(available, server)
+			regionalServers = append(regionalServers, server)
 		}
 		// Otherwise skip - this server is for a different region
+	}
+	
+	// Logic: If regional servers exist for this country, use ONLY them
+	// Otherwise, use global servers
+	if len(regionalServers) > 0 {
+		// Country has dedicated regional servers - use only those
+		available = regionalServers
+	} else {
+		// No regional servers for this country - use global servers
+		available = globalServers
 	}
 
 	if len(available) == 0 {
