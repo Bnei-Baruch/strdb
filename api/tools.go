@@ -16,12 +16,14 @@ import (
 )
 
 type Server struct {
-	Name     string `json:"name"`
-	DNS      string `json:"dns"`
-	Sessions int    `json:"sessions"`
-	Enable   bool   `json:"enable"`
-	Online   bool   `json:"online"`
-	Region   string `json:"region"` // Region restriction, e.g., "RU" for Russia-only servers
+	Name       string `json:"name"`
+	DNS        string `json:"dns"`
+	Sessions   int    `json:"sessions"`
+	Enable     bool   `json:"enable"`
+	Online     bool   `json:"online"`
+	Region     string `json:"region"`      // Region restriction, e.g., "RU" for Russia-only servers
+	MissedPing int    `json:"-"`           // Not serialized - counts missed admin responses
+	LastSeen   int64  `json:"last_seen"`   // Unix timestamp of last successful admin response
 }
 
 type Config map[string]Server
@@ -210,7 +212,17 @@ func SetOnline(name string, status bool) {
 	defer mutex.Unlock()
 
 	if server, ok := StrDB[name]; ok {
+		if server.Online != status {
+			log.WithFields(log.Fields{
+				"server":     name,
+				"old_status": server.Online,
+				"new_status": status,
+			}).Info("Server status changed via MQTT")
+		}
 		server.Online = status
+		if status {
+			server.MissedPing = 0
+		}
 		StrDB[name] = server
 	}
 }

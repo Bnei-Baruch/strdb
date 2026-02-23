@@ -80,6 +80,8 @@ func InitMQTT() error {
 	return nil
 }
 
+const maxMissedPings = 3
+
 func startPeriodicMessages() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -87,15 +89,30 @@ func startPeriodicMessages() {
 	for {
 		select {
 		case <-ticker.C:
-			// Send admin messages to enable and online servers
-			mutex.RLock()
-			for _, server := range StrDB {
-				if server.Online && server.Enable {
+			mutex.Lock()
+			for name, server := range StrDB {
+				if !server.Enable || !server.Online {
+					continue
+				}
+
+				server.MissedPing++
+				StrDB[name] = server
+
+				if server.MissedPing > maxMissedPings {
+					server.Online = false
+					server.Sessions = 0
+					StrDB[name] = server
+					log.WithFields(log.Fields{
+						"server":       name,
+						"missed_pings": server.MissedPing,
+						"last_seen":    server.LastSeen,
+					}).Warn("Server marked offline: no response to admin messages")
+				} else {
 					topic := fmt.Sprintf("janus/%s/to-janus-admin", server.Name)
-					SendAdminMessage(topic)
+					go SendAdminMessage(topic)
 				}
 			}
-			mutex.RUnlock()
+			mutex.Unlock()
 		}
 	}
 }
@@ -151,17 +168,43 @@ func SendAdminMessage(topic string) {
 func HandleStatusMessage(c mqtt.Client, m mqtt.Message) {
 	go func() {
 		s := strings.Split(m.Topic(), "/")
-		chk, _ := regexp.MatchString(`str`, s[1])
-		if chk == true {
-			if viper.GetString("mqtt.debug") == "true" {
-				log.Debugf("[HandleStatusMessage] topic: %s |  message: %s", m.Topic(), string(m.Payload()))
-			}
-			var update StrStatus
-			if err := json.Unmarshal(m.Payload(), &update); err != nil {
-				log.Errorf("[HandleStatusMessage] Faild to unmarshal: %s", err)
-			}
-			SetOnline(s[1], update.Online)
+		if len(s) < 2 {
+			log.Errorf("[HandleStatusMessage] Invalid topic format: %s", m.Topic())
+			return
 		}
+
+		serverName := s[1]
+		chk, _ := regexp.MatchString(`^str\d+$`, serverName)
+		if !chk {
+			log.WithFields(log.Fields{
+				"topic":       m.Topic(),
+				"server_name": serverName,
+			}).Warn("[HandleStatusMessage] Server name does not match pattern")
+			return
+		}
+
+		log.WithFields(log.Fields{
+			"topic":   m.Topic(),
+			"server":  serverName,
+			"payload": string(m.Payload()),
+		}).Info("[HandleStatusMessage] Received status message")
+
+		var update StrStatus
+		if err := json.Unmarshal(m.Payload(), &update); err != nil {
+			log.WithFields(log.Fields{
+				"server":  serverName,
+				"payload": string(m.Payload()),
+				"error":   err.Error(),
+			}).Error("[HandleStatusMessage] Failed to unmarshal")
+			return
+		}
+
+		log.WithFields(log.Fields{
+			"server": serverName,
+			"online": update.Online,
+		}).Info("[HandleStatusMessage] Setting server status")
+
+		SetOnline(serverName, update.Online)
 	}()
 }
 
@@ -185,11 +228,18 @@ func HandleAdminMessage(c mqtt.Client, m mqtt.Message) {
 		}
 
 		if response.Janus == "success" {
-			// Update sessions count in StrDB
 			mutex.Lock()
 			if server, ok := StrDB[serverName]; ok {
 				server.Sessions = len(response.Sessions)
+				server.MissedPing = 0
+				server.LastSeen = time.Now().Unix()
 				StrDB[serverName] = server
+
+				log.WithFields(log.Fields{
+					"server":   serverName,
+					"sessions": server.Sessions,
+					"online":   server.Online,
+				}).Debug("[HandleAdminMessage] Updated server sessions")
 			}
 			mutex.Unlock()
 		}
