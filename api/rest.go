@@ -34,7 +34,13 @@ func (fi *FlexibleInt) UnmarshalJSON(data []byte) error {
 
 	num, err := strconv.Atoi(str)
 	if err != nil {
-		return err
+		// If parsing fails (e.g., UUID string), default to 0 and log warning
+		log.WithFields(log.Fields{
+			"value": str,
+			"error": err.Error(),
+		}).Debug("Non-numeric value in FlexibleInt field, using 0")
+		*fi = 0
+		return nil
 	}
 
 	*fi = FlexibleInt(num)
@@ -66,7 +72,13 @@ func (fi *FlexibleInt64) UnmarshalJSON(data []byte) error {
 
 	num, err := strconv.ParseInt(str, 10, 64)
 	if err != nil {
-		return err
+		// If parsing fails (e.g., UUID string), default to 0 and log warning
+		log.WithFields(log.Fields{
+			"value": str,
+			"error": err.Error(),
+		}).Debug("Non-numeric value in FlexibleInt64 field, using 0")
+		*fi = 0
+		return nil
 	}
 
 	*fi = FlexibleInt64(num)
@@ -94,9 +106,9 @@ type User struct {
 	Group      string        `json:"group"`
 	Camera     bool          `json:"camera"`
 	Question   bool          `json:"question"`
-	Timestamp  int64         `json:"timestamp"`
-	Session    int64         `json:"session"`
-	Handle     int64         `json:"handle"`
+	Timestamp  FlexibleInt64 `json:"timestamp"`
+	Session    FlexibleInt64 `json:"session"`
+	Handle     FlexibleInt64 `json:"handle"`
 	RFID       FlexibleInt64 `json:"rfid"`
 }
 

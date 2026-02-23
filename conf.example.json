@@ -1,0 +1,42 @@
+{
+  "str1": {
+    "name": "str1",
+    "dns": "str1.example.com",
+    "sessions": 0,
+    "enable": true,
+    "online": true,
+    "region": ""
+  },
+  "str2": {
+    "name": "str2",
+    "dns": "str2.example.com",
+    "sessions": 0,
+    "enable": true,
+    "online": true,
+    "region": ""
+  },
+  "str9": {
+    "name": "str9",
+    "dns": "str9.example.com",
+    "sessions": 0,
+    "enable": true,
+    "online": true,
+    "region": "RU"
+  },
+  "str10": {
+    "name": "str10",
+    "dns": "str10.example.com",
+    "sessions": 0,
+    "enable": true,
+    "online": true,
+    "region": "CN"
+  },
+  "str11": {
+    "name": "str11",
+    "dns": "str11.example.com",
+    "sessions": 0,
+    "enable": true,
+    "online": true,
+    "region": "US"
+  }
+}
