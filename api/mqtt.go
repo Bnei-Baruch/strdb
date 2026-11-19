@@ -91,26 +91,29 @@ func startPeriodicMessages() {
 		case <-ticker.C:
 			mutex.Lock()
 			for name, server := range StrDB {
-				if !server.Enable || !server.Online {
+				if !server.Enable {
 					continue
 				}
 
-				server.MissedPing++
-				StrDB[name] = server
-
-				if server.MissedPing > maxMissedPings {
-					server.Online = false
-					server.Sessions = 0
+				if server.Online {
+					server.MissedPing++
 					StrDB[name] = server
-					log.WithFields(log.Fields{
-						"server":       name,
-						"missed_pings": server.MissedPing,
-						"last_seen":    server.LastSeen,
-					}).Warn("Server marked offline: no response to admin messages")
-				} else {
-					topic := fmt.Sprintf("janus/%s/to-janus-admin", server.Name)
-					go SendAdminMessage(topic)
+
+					if server.MissedPing > maxMissedPings {
+						server.Online = false
+						server.Sessions = 0
+						StrDB[name] = server
+						log.WithFields(log.Fields{
+							"server":       name,
+							"missed_pings": server.MissedPing,
+							"last_seen":    server.LastSeen,
+						}).Warn("Server marked offline: no response to admin messages")
+					}
 				}
+
+				// Always ping enabled servers (online and offline) for health-check
+				topic := fmt.Sprintf("janus/%s/to-janus-admin", server.Name)
+				go SendAdminMessage(topic)
 			}
 			mutex.Unlock()
 		}
@@ -184,9 +187,12 @@ func HandleStatusMessage(c mqtt.Client, m mqtt.Message) {
 		}
 
 		log.WithFields(log.Fields{
-			"topic":   m.Topic(),
-			"server":  serverName,
-			"payload": string(m.Payload()),
+			"topic":     m.Topic(),
+			"server":    serverName,
+			"payload":   string(m.Payload()),
+			"retained":  m.Retained(),
+			"messageID": m.MessageID(),
+			"duplicate": m.Duplicate(),
 		}).Info("[HandleStatusMessage] Received status message")
 
 		var update StrStatus
@@ -230,16 +236,20 @@ func HandleAdminMessage(c mqtt.Client, m mqtt.Message) {
 		if response.Janus == "success" {
 			mutex.Lock()
 			if server, ok := StrDB[serverName]; ok {
+				wasOffline := !server.Online
 				server.Sessions = len(response.Sessions)
 				server.MissedPing = 0
 				server.LastSeen = time.Now().Unix()
-				StrDB[serverName] = server
 
-				log.WithFields(log.Fields{
-					"server":   serverName,
-					"sessions": server.Sessions,
-					"online":   server.Online,
-				}).Debug("[HandleAdminMessage] Updated server sessions")
+				if wasOffline {
+					server.Online = true
+					log.WithFields(log.Fields{
+						"server":   serverName,
+						"sessions": server.Sessions,
+					}).Warn("Server back ONLINE: received admin response after being offline")
+				}
+
+				StrDB[serverName] = server
 			}
 			mutex.Unlock()
 		}
