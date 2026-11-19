@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,14 +18,52 @@ import (
 )
 
 type Server struct {
-	Name       string `json:"name"`
-	DNS        string `json:"dns"`
-	Sessions   int    `json:"sessions"`
-	Enable     bool   `json:"enable"`
-	Online     bool   `json:"online"`
-	Region     string `json:"region"`      // Region restriction, e.g., "RU" for Russia-only servers
-	MissedPing int    `json:"-"`           // Not serialized - counts missed admin responses
-	LastSeen   int64  `json:"last_seen"`   // Unix timestamp of last successful admin response
+	Name       string   `json:"name"`
+	DNS        string   `json:"dns"`
+	Sessions   int      `json:"sessions"`
+	Enable     bool     `json:"enable"`
+	Online     bool     `json:"online"`
+	Region     string   `json:"region"`             // Region restriction, e.g., "RU" for Russia-only servers
+	Networks   []string `json:"networks,omitempty"` // Exclusive client networks (CIDR), e.g., "5.29.112.160/28"
+	MissedPing int      `json:"-"`                  // Not serialized - counts missed admin responses
+	LastSeen   int64    `json:"last_seen"`          // Unix timestamp of last successful admin response
+
+	nets []*net.IPNet // Parsed Networks
+}
+
+// parseNetworks parses CIDR strings of every server. Invalid entries are logged and skipped.
+// A server whose Networks list is non-empty stays exclusive even if all entries are invalid,
+// so a typo never turns a dedicated server into a public one.
+func parseNetworks(conf Config) {
+	for name, server := range conf {
+		server.nets = nil
+		for _, cidr := range server.Networks {
+			_, ipNet, err := net.ParseCIDR(strings.TrimSpace(cidr))
+			if err != nil {
+				log.WithFields(log.Fields{
+					"server":  name,
+					"network": cidr,
+					"error":   err.Error(),
+				}).Error("Invalid network in server config, skipped")
+				continue
+			}
+			server.nets = append(server.nets, ipNet)
+		}
+		conf[name] = server
+	}
+}
+
+// matchNetwork returns the server network containing ip, or nil.
+func (s Server) matchNetwork(ip net.IP) *net.IPNet {
+	if ip == nil {
+		return nil
+	}
+	for _, n := range s.nets {
+		if n.Contains(ip) {
+			return n
+		}
+	}
+	return nil
 }
 
 type Config map[string]Server
@@ -74,6 +114,7 @@ func InitConf() error {
 		log.Errorf("Get conf error: %s", err)
 		return err
 	}
+	parseNetworks(*strdb)
 	mutex.Lock()
 	StrDB = *strdb
 	mutex.Unlock()
@@ -97,20 +138,33 @@ func getConf() (*Config, error) {
 }
 
 func getBestServer() (string, error) {
-	return getBestServerForCountry("")
+	return getBestServerForClient("", "")
 }
 
-func getBestServerForCountry(countryCode string) (string, error) {
+func getBestServerForClient(countryCode string, clientIP string) (string, error) {
 	mutex.RLock()
 	defer mutex.RUnlock()
 
+	ip := net.ParseIP(strings.TrimSpace(clientIP))
+
 	var available []Server
+	var networkServers []Server
 	var regionalServers []Server
 	var globalServers []Server
+	var matchedNetworks []string
 
-	// Filter servers based on country code and region restrictions
+	// Filter servers based on client network, country code and region restrictions
 	for _, server := range StrDB {
 		if !server.Online || !server.Enable {
+			continue
+		}
+
+		if len(server.Networks) > 0 {
+			// Network-dedicated server: exclusive to clients from its networks
+			if n := server.matchNetwork(ip); n != nil {
+				networkServers = append(networkServers, server)
+				matchedNetworks = append(matchedNetworks, n.String())
+			}
 			continue
 		}
 
@@ -124,10 +178,20 @@ func getBestServerForCountry(countryCode string) (string, error) {
 		// Otherwise skip - this server is for a different region
 	}
 
-	// Logic: If regional servers exist for this country, use ONLY them
-	// Otherwise, use global servers
+	// Logic: client network servers first, then regional servers for the country,
+	// otherwise global servers
 	var poolType string
-	if len(regionalServers) > 0 {
+	if len(networkServers) > 0 {
+		available = networkServers
+		poolType = "network"
+		log.WithFields(log.Fields{
+			"client_ip":        clientIP,
+			"country_code":     countryCode,
+			"network_servers":  len(networkServers),
+			"matched_networks": matchedNetworks,
+			"pool_type":        poolType,
+		}).Info("Using network server pool (client IP matched dedicated network)")
+	} else if len(regionalServers) > 0 {
 		// Country has dedicated regional servers - use only those
 		available = regionalServers
 		poolType = "regional"
@@ -150,7 +214,7 @@ func getBestServerForCountry(countryCode string) (string, error) {
 	}
 
 	if len(available) == 0 {
-		err := errors.New("getBestServerForCountry: no available servers")
+		err := errors.New("getBestServerForClient: no available servers")
 		log.WithFields(log.Fields{
 			"country_code": countryCode,
 		}).Error(err)
@@ -192,6 +256,7 @@ func getBestServerForCountry(countryCode string) (string, error) {
 	}
 
 	log.WithFields(log.Fields{
+		"client_ip":         clientIP,
 		"country_code":      countryCode,
 		"pool_type":         poolType,
 		"available_servers": availableNames,

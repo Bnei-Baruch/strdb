@@ -69,7 +69,7 @@ else:
 
 ### 4. Functions
 
-#### `getBestServerForCountry(countryCode string)`
+#### `getBestServerForClient(countryCode, clientIP string)`
 New function that selects the optimal server based on the client's country code.
 
 **Parameters:**
@@ -293,3 +293,25 @@ All changes are backward compatible:
 - GET `/server` works without region filtering
 - Old configurations without `region` field will continue to work
 - **Universal logic** - no code changes required when adding new countries
+
+## Network-Dedicated Servers (`networks`)
+
+A server can be pinned to client networks (CIDR):
+
+```json
+"str12": {
+  "name": "str12",
+  "dns": "str12.example.com",
+  "enable": true,
+  "online": true,
+  "region": "",
+  "networks": ["5.29.112.160/28", "84.108.114.96/28"]
+}
+```
+
+- A server with a non-empty `networks` list is **exclusive**: only clients whose IP falls into one of its networks get it. Its `region` field is ignored.
+- Selection priority: **network → region (country) → global**.
+- If all dedicated servers for the network are offline/disabled, the client falls back to the regular logic (regional or global).
+- Client IP is taken from the `ip` field of the `POST /server` body; if empty, from the request address (`c.ClientIP()`).
+- Invalid CIDRs are logged on load and skipped; the server still stays exclusive.
+- Logs mark such selection with `pool_type: network` and `matched_networks`.

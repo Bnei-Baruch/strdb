@@ -167,11 +167,17 @@ func getServerByID(c *gin.Context) {
 	// Get country code from Geo data
 	countryCode := t.Geo.CountryCode
 
+	// Client IP from request body, fallback to request remote address
+	clientIP := t.IP
+	if clientIP == "" {
+		clientIP = c.ClientIP()
+	}
+
 	// Log client request details
 	log.WithFields(log.Fields{
 		"username":     t.Username,
 		"email":        t.Email,
-		"ip":           t.IP,
+		"ip":           clientIP,
 		"country":      t.Country,
 		"country_code": countryCode,
 		"city":         t.Geo.City,
@@ -180,7 +186,7 @@ func getServerByID(c *gin.Context) {
 		"rfid":         int64(t.RFID),
 	}).Info("Client requesting server")
 
-	srv, err := getBestServerForCountry(countryCode)
+	srv, err := getBestServerForClient(countryCode, clientIP)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"username":     t.Username,
