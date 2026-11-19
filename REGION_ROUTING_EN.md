@@ -305,7 +305,7 @@ A server can be pinned to client networks (CIDR):
   "enable": true,
   "online": true,
   "region": "",
-  "networks": ["5.29.112.160/28", "84.108.114.96/28"]
+  "networks": ["192.0.2.0/28", "198.51.100.16/28"]
 }
 ```
 

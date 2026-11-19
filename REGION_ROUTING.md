@@ -285,7 +285,7 @@ DEBUG Selected server for request server=str9 dns=str9.example.com sessions=5 re
   "enable": true,
   "online": true,
   "region": "",
-  "networks": ["5.29.112.160/28", "84.108.114.96/28"]
+  "networks": ["192.0.2.0/28", "198.51.100.16/28"]
 }
 ```
 

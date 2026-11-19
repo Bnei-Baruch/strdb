@@ -24,7 +24,7 @@ type Server struct {
 	Enable     bool     `json:"enable"`
 	Online     bool     `json:"online"`
 	Region     string   `json:"region"`             // Region restriction, e.g., "RU" for Russia-only servers
-	Networks   []string `json:"networks,omitempty"` // Exclusive client networks (CIDR), e.g., "5.29.112.160/28"
+	Networks   []string `json:"networks,omitempty"` // Exclusive client networks (CIDR), e.g., "192.0.2.0/28"
 	MissedPing int      `json:"-"`                  // Not serialized - counts missed admin responses
 	LastSeen   int64    `json:"last_seen"`          // Unix timestamp of last successful admin response
 
